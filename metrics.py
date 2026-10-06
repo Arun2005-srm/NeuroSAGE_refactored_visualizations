@@ -42,6 +42,8 @@ def format_epoch(epoch, total, train, val):
         return (f"Acc {metrics['accuracy']:.2%} / Loss {metrics['loss']:.4f}")
     lines = [f"ep[{epoch}/{total}] Train: {summary(train)} || Val: {summary(val)}"]
     lines[0] += f" | Precision {val['macro_precision']:.2%} | F1 {val['macro_f1']:.2%}"
+    if "seconds" in train and "seconds" in val:
+        lines[0] += f" | Time {train['seconds'] + val['seconds']:.1f}s"
     lines.append("Val class acc: " + " | ".join(
         f"{name} {metrics['accuracy']:.2%}" for name, metrics in val["per_class"].items()
     ))

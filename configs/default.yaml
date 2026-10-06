@@ -72,6 +72,11 @@ model:
 training:
   folds: 5
   epochs: 20
+  early_stopping:
+    enabled: false
+    patience: 4
+    min_delta: 0.001
+    min_epochs: 5
   cv_pool: train
   learning_rate: 0.0001
   backbone_learning_rate: 0.00001

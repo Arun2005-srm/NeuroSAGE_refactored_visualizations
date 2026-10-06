@@ -57,7 +57,7 @@ def main(config_path, dry_run=False, skip_test=False):
     device = setup_runtime(cfg["runtime"])
     amp = cfg["runtime"]["use_amp"] and device.type == "cuda"
     train_cfg = cfg["training"]
-    log(f"Device: {device} | AMP: {amp} | Exactly 5 folds x 20 epochs; checkpoint selection uses {train_cfg['selection_metric']}")
+    log(f"Device: {device} | AMP: {amp} | 5 folds, maximum 20 epochs; checkpoint selection uses {train_cfg['selection_metric']}")
     log(f"Partition counts: {sizes} | Classes: {classes}")
     if cfg["dataset"]["split"]["strategy"] == "group":
         log("Group integrity is enforced; 70/15/15 image counts are approximate when group sizes differ.")
@@ -88,6 +88,8 @@ def main(config_path, dry_run=False, skip_test=False):
         scaler = torch.amp.GradScaler(device.type, enabled=amp)
         criterion = ClassificationLoss(cfg["loss"])
         history, best_score = [], -float("inf")
+        stop_cfg = train_cfg.get("early_stopping", {})
+        stop_best, stale_epochs = -float("inf"), 0
         log(f"\nFold [{fold_number}/5] | Train images {len(train_records)} | Fold validation images {len(val_records)}")
         for epoch in range(1, train_cfg["epochs"] + 1):
             model.set_temperature(epoch, train_cfg["epochs"])
@@ -105,6 +107,14 @@ def main(config_path, dry_run=False, skip_test=False):
             if scheduler is not None:
                 scheduler.step()
             write_json(fold_dir / "history.json", history)
+            if stop_cfg.get("enabled", False):
+                if score > stop_best + stop_cfg.get("min_delta", 0.001):
+                    stop_best, stale_epochs = score, 0
+                else:
+                    stale_epochs += 1
+                if epoch >= stop_cfg.get("min_epochs", 5) and stale_epochs >= stop_cfg.get("patience", 4):
+                    log(f"Early stopping at epoch {epoch}; restoring best validation checkpoint.")
+                    break
         checkpoint = torch.load(fold_dir / "best_model.pt", map_location=device, weights_only=True)
         model.load_state_dict(checkpoint["model_state"])
         cv_metrics, rows = run_epoch(model, val_loader, criterion, device, classes, amp_enabled=amp)

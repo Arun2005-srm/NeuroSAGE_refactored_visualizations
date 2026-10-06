@@ -42,7 +42,16 @@ def validate_config(cfg):
     if train["cv_pool"] not in ("train", "development"):
         raise ValueError("training.cv_pool must be train or development")
     if train["folds"] != 5 or train["epochs"] != 20:
-        raise ValueError("The training protocol requires 5 folds and 20 epochs per fold")
+        raise ValueError("The training protocol requires 5 folds and a maximum of 20 epochs per fold")
+    early = train.get("early_stopping", {})
+    if not isinstance(early.get("enabled", False), bool):
+        raise ValueError("early_stopping.enabled must be boolean")
+    if not isinstance(early.get("patience", 4), int) or early.get("patience", 4) < 1:
+        raise ValueError("early_stopping.patience must be a positive integer")
+    if not isinstance(early.get("min_epochs", 5), int) or not 1 <= early.get("min_epochs", 5) <= train["epochs"]:
+        raise ValueError("early_stopping.min_epochs must be within the epoch budget")
+    if not 0 <= early.get("min_delta", 0.001) < float("inf"):
+        raise ValueError("early_stopping.min_delta must be finite and nonnegative")
     if train["selection_metric"] not in ("macro_f1", "accuracy", "balanced_accuracy", "loss"):
         raise ValueError("Unsupported selection_metric")
     if train["scheduler"] not in ("cosine", "none"):

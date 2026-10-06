@@ -7,4 +7,18 @@ dataset:
     - /content/dataset/test
   classes: [glioma, meningioma, no_tumor, pituitary]
 training:
+  early_stopping:
+    enabled: true
+    patience: 4
+    min_delta: 0.001
+    min_epochs: 5
   output_dir: /content/neurosage_runs/brisc
+model:
+  selector:
+    dropout: 0.2
+  projector:
+    dropout: 0.3
+  graph:
+    dropout: 0.3
+  head:
+    dropout: 0.4

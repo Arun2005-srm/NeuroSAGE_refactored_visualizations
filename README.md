@@ -127,7 +127,7 @@ Unreadable images, repeated paths, conflicting class mappings, and exact duplica
 1. Discover all images and establish a single class mapping.
 2. Create reproducible, stratified **70% training / 15% validation / 15% test** partitions. Integer rounding applies to image counts.
 3. Run **five folds within the 70% training partition**. Each fold trains on roughly 56% of the complete dataset and validates on roughly 14%.
-4. Train **all 20 epochs per fold**, validating after every epoch. There is no early stopping. Save the epoch with the best fold-validation macro F1 (configurable to accuracy, balanced accuracy, or loss).
+4. Train up to **20 epochs per fold**, validating after every epoch. Optional `training.early_stopping` uses the checkpoint selection metric, with configurable `patience`, `min_delta`, and `min_epochs`. BRISC enables it with patience 4; the default configuration retains the fixed 20-epoch protocol. Save the epoch with the best fold-validation macro F1 (configurable to accuracy, balanced accuracy, or loss).
 5. After each fold, evaluate its best checkpoint on the independent 15% validation partition.
 6. Select the final fold checkpoint using that 15% validation result. Evaluate the untouched 15% test partition once after all five folds.
 

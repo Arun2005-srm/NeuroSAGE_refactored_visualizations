@@ -8,11 +8,27 @@ import torch
 from metrics import classification_metrics
 
 
+def _step_optimizer(model, optimizer, scaler, grad_clip):
+    scaler.unscale_(optimizer)
+    gradients = [p.grad for p in model.parameters() if p.grad is not None]
+    if not gradients:
+        raise RuntimeError("No gradients reached the model")
+    finite = bool(torch.stack([torch.isfinite(g).all() for g in gradients]).all())
+    if finite:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip, error_if_nonfinite=True)
+    elif not scaler.is_enabled():
+        raise FloatingPointError("Non-finite gradients with AMP disabled")
+    scaler.step(optimizer)
+    scaler.update()
+    return finite
+
+
 def run_epoch(model, loader, criterion, device, classes, optimizer=None, scaler=None, amp_enabled=False, grad_clip=1.0):
     training = optimizer is not None
     model.train(training)
     labels_all, probabilities_all, rows = [], [], []
     total_loss, count = 0.0, 0
+    skipped_updates = 0
     if device.type == "cuda":
         torch.cuda.synchronize(device)
     started = time.perf_counter()
@@ -29,10 +45,8 @@ def run_epoch(model, loader, criterion, device, classes, optimizer=None, scaler=
                 raise FloatingPointError("Non-finite loss; check inputs, AMP settings, and learning rates")
             if training:
                 scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip, error_if_nonfinite=True)
-                scaler.step(optimizer)
-                scaler.update()
+                if not _step_optimizer(model, optimizer, scaler, grad_clip):
+                    skipped_updates += 1
             probabilities = logits.detach().float().softmax(dim=1).cpu().numpy()
             true = labels.cpu().numpy()
             labels_all.extend(true.tolist())
@@ -52,5 +66,6 @@ def run_epoch(model, loader, criterion, device, classes, optimizer=None, scaler=
         torch.cuda.synchronize(device)
     metrics = classification_metrics(labels_all, probabilities_all, classes, total_loss / max(count, 1))
     metrics["seconds"] = time.perf_counter() - started
+    metrics["skipped_updates"] = skipped_updates
     metrics["samples_per_second"] = count / max(metrics["seconds"], 1e-9)
     return metrics, rows
